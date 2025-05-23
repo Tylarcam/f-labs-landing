@@ -1,11 +1,22 @@
 'use client';
 
+import Image from 'next/image';
 import { motion } from 'framer-motion';
 
 export default function AIInfrastructureSection() {
   return (
-    <section className="py-20 bg-black">
-      <div className="container mx-auto px-4">
+    <section className="py-20 bg-black relative overflow-hidden">
+      {/* Background image */}
+      <Image
+        src="/images/cloud_Networks_3.jpg"
+        alt="Futuristic Server Background"
+        fill
+        className="object-cover z-0"
+        priority={false}
+      />
+      {/* Dark overlay for readability */}
+      <div className="absolute inset-0 bg-black/70 z-10" />
+      <div className="container mx-auto px-4 relative z-20">
         <motion.div
           initial={{ opacity: 0 }}
           whileInView={{ opacity: 1 }}
