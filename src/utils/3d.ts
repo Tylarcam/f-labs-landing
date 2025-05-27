@@ -29,9 +29,11 @@ export function transform3DNode(
   const perspective = 400;
   const scale = perspective / (perspective + z);
   
+  // Clamp x and y to always be between 10 and 90 (percent)
+  const clamp = (val: number, min: number, max: number) => Math.max(min, Math.min(max, val));
   return {
-    x: centerX + x * scale,
-    y: centerY + y * scale,
+    x: clamp(centerX + x * scale, 10, 90),
+    y: clamp(centerY + y * scale, 10, 90),
     scale: scale,
     depth: z
   };
