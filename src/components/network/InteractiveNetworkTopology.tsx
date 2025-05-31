@@ -2,10 +2,40 @@ import React, { useEffect, useRef, useState } from 'react';
 import { NetworkNode, NodeStatus, GameMode } from '../../types';
 import { ThreatManager } from '../../game/ThreatManager';
 import { Server, Database, Shield, Wifi, Monitor } from 'lucide-react';
+import { useGameState } from '../../hooks/useGameState';
+import { useGameInteraction } from '../../hooks/useGameInteraction';
+import { useNodeInteraction } from '../../hooks/useNodeInteraction';
+import { useNodeStatus } from '../../hooks/useNodeStatus';
+import { useNodeVisibility } from '../../hooks/useNodeVisibility';
+import { useNodeAnimation } from '../../hooks/useNodeAnimation';
+import { useNodeSelection } from '../../hooks/useNodeSelection';
+import { useNodeFeedback } from '../../hooks/useNodeFeedback';
+import { useNodeEffects } from '../../hooks/useNodeEffects';
+import { useNodeConnections } from '../../hooks/useNodeConnections';
+import { useNodeLabels } from '../../hooks/useNodeLabels';
+import { useNodeIcons } from '../../hooks/useNodeIcons';
+import { useNodeColors } from '../../hooks/useNodeColors';
+import { useNodeShapes } from '../../hooks/useNodeShapes';
+import { useNodeSizes } from '../../hooks/useNodeSizes';
+import { useNodePositions } from '../../hooks/useNodePositions';
+import { useNodeInteractions } from '../../hooks/useNodeInteractions';
+import { useNodeAnimations } from '../../hooks/useNodeAnimations';
+import { useNodeTransitions } from '../../hooks/useNodeTransitions';
+import { useNodeGestures } from '../../hooks/useNodeGestures';
+import { useNodeAccessibility } from '../../hooks/useNodeAccessibility';
+import { useNodePerformance } from '../../hooks/useNodePerformance';
+import { useNodeDebug } from '../../hooks/useNodeDebug';
+import { useNodeMetrics } from '../../hooks/useNodeMetrics';
+import { useNodeAnalytics } from '../../hooks/useNodeAnalytics';
+import { useNodeErrorBoundary } from '../../hooks/useNodeErrorBoundary';
+import { useNodeContext } from '../../hooks/useNodeContext';
+import { useNodeState } from '../../hooks/useNodeState';
+import { useNodeRefs } from '../../hooks/useNodeRefs';
+import { useNodeCallbacks } from '../../hooks/useNodeCallbacks';
 
 interface Props {
   nodes: NetworkNode[];
-  onNodeClick: (node: NetworkNode) => void;
+  onNodeClick?: (node: NetworkNode) => void;
   mode: GameMode;
   isTransitioning: boolean;
   targetingMode: { isActive: boolean; actionType: string | null };
@@ -24,6 +54,14 @@ const InteractiveNetworkTopology: React.FC<Props> = ({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationFrameRef = useRef<number>();
   const threatManager = ThreatManager.getInstance();
+  const { gameState } = useGameState();
+  const { 
+    selectedNode,
+    actionTarget,
+    handleNodeSelection,
+    handleActionTargeting
+  } = useGameInteraction();
+
   const [rotationX, setRotationX] = useState(0);
   const [rotationY, setRotationY] = useState(0);
   const [zoom, setZoom] = useState(1);
@@ -74,6 +112,16 @@ const InteractiveNetworkTopology: React.FC<Props> = ({
         return '#9C27B0'; // Purple
       case 'active':
         return '#607D8B'; // Blue Grey
+      case 'quarantined':
+        return '#795548'; // Brown
+      case 'backed_up':
+        return '#009688'; // Teal
+      case 'detected':
+        return '#E91E63'; // Pink
+      case 'overloaded':
+        return '#FF5722'; // Deep Orange
+      case 'degraded':
+        return '#9E9E9E'; // Grey
       default:
         return '#9E9E9E'; // Grey
     }
@@ -241,6 +289,15 @@ const InteractiveNetworkTopology: React.FC<Props> = ({
     setZoom(prev => Math.max(0.5, Math.min(2, prev - e.deltaY * 0.001)));
   };
 
+  const handleNodeClick = (node: NetworkNode) => {
+    if (targetingMode.isActive) {
+      handleActionTargeting(node);
+    } else {
+      handleNodeSelection(node);
+    }
+    onNodeClick?.(node);
+  };
+
   const NodeElement: React.FC<{ 
     node: NetworkNode,
     onClick: (node: NetworkNode) => void,
@@ -263,19 +320,23 @@ const InteractiveNetworkTopology: React.FC<Props> = ({
     // Determine if this node is a valid target for the current action
     const isValidTarget = isTargeting && targetingAction ? threatManager.isValidTarget(node, mode, targetingAction) : true;
 
+    const handleClick = (e: React.MouseEvent) => {
+      e.stopPropagation(); // Prevent event bubbling
+      if (isInteractable) {
+        onClick(node);
+      }
+    };
+
     return (
       <div
         ref={nodeRef}
         className={`absolute group cursor-pointer select-none
           ${isTargeting ? 'border-2 border-dashed border-yellow-400' : ''}
-          ${threatManager.canInteractWithNode(node, mode, targetingAction || '') ? '' : 'opacity-50'}
+          ${isInteractable ? '' : 'opacity-50 cursor-not-allowed'}
           ${isSelected ? 'border-2 border-solid border-purple-400 ring-2 ring-purple-400' : ''}
         `}
         style={{ left: `${x}%`, top: `${y}%`, transform: 'translate(-50%, -50%) scale(${scale})', zIndex: dragging ? 10 : 1 }}
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseUp}
+        onClick={handleClick}
       >
         {/* Node Circle */}
         <div 
@@ -349,12 +410,12 @@ const InteractiveNetworkTopology: React.FC<Props> = ({
       {/* HTML Elements for Nodes */}
       {nodes.map(node => {
         const transformed = transform3DNode(node.x, node.y, node.z);
-        // Determine if this node is a valid target for the current action
         const isValidTarget = targetingMode.isActive && targetingMode.actionType 
           ? threatManager.isValidTarget(node, mode, targetingMode.actionType) 
-          : true; // Always valid if not in targeting mode
+          : true;
 
-        const isSelected = node.id === selectedNodeId; // Check if this node is selected
+        const isSelected = node.id === selectedNodeId || node === selectedNode;
+        const isActionTarget = node === actionTarget;
 
         return (
           <div
@@ -362,6 +423,7 @@ const InteractiveNetworkTopology: React.FC<Props> = ({
             className={`absolute group cursor-pointer select-none transition-all duration-200
               ${targetingMode.isActive ? (isValidTarget ? '' : 'opacity-50') : ''}
               ${isSelected ? 'border-2 border-solid border-purple-400 ring-2 ring-purple-400' : ''}
+              ${isActionTarget ? 'border-2 border-solid border-red-400 ring-2 ring-red-400' : ''}
               ${node.feedbackStatus === 'success' ? 'ring-2 ring-green-500' : ''}
               ${node.feedbackStatus === 'failure' ? 'ring-2 ring-red-500' : ''}
             `}
@@ -369,20 +431,21 @@ const InteractiveNetworkTopology: React.FC<Props> = ({
               left: `${transformed.x}px`,
               top: `${transformed.y}px`,
               transform: `translate(-50%, -50%) scale(${transformed.scale})`,
-              zIndex: Math.round(transformed.scale * 10), // Adjust zIndex based on scale for layering
-              pointerEvents: isTransitioning ? 'none' : 'auto', // Disable pointer events during transition
+              zIndex: Math.round(transformed.scale * 10),
+              pointerEvents: isTransitioning ? 'none' : 'auto',
             }}
-            onClick={() => onNodeClick(node)}
+            onClick={() => handleNodeClick(node)}
           >
             {/* Node Circle */}
             <div 
               className={`w-16 h-16 rounded-full border-2 flex items-center justify-center bg-gray-900/80 relative
                 ${targetingMode.isActive ? (isValidTarget ? 'animate-pulse' : '') : ''}
+                ${isActionTarget ? 'animate-pulse' : ''}
               `}
               style={{ 
-                borderColor: isTransitioning ? '#666666' : '#FFFFFF', // Dim borders during transition
+                borderColor: isTransitioning ? '#666666' : '#FFFFFF',
                 backgroundColor: getNodeColor(node),
-                boxShadow: targetingMode.isActive && isValidTarget ? '0 0 20px currentColor' : 'none'
+                boxShadow: (targetingMode.isActive && isValidTarget) || isActionTarget ? '0 0 20px currentColor' : 'none'
               }}
             >
               {/* Icon */}
@@ -391,26 +454,28 @@ const InteractiveNetworkTopology: React.FC<Props> = ({
               </div>
               
               {/* Targeting Indicator */}
-              {targetingMode.isActive && isValidTarget && ( // Only show indicator if targeting and valid
+              {(targetingMode.isActive && isValidTarget) || isActionTarget ? (
                 <div className="absolute inset-0 rounded-full animate-ping bg-current opacity-20" />
-              )}
+              ) : null}
             </div>
 
             {/* Node Label */}
             <div className="absolute -bottom-8 left-1/2 transform -translate-x-1/2 text-xs whitespace-nowrap text-center">
               <div className="font-bold text-white">{node.name}</div>
-              <div className={`text-xs ${mode === 'WHITE_HAT' ? 'text-blue-400' : 'text-green-400'}`}>{node.status.toUpperCase()}</div>
-              {targetingMode.isActive && !isValidTarget && ( // Only show invalid target if targeting and invalid
+              <div className={`text-xs ${mode === 'WHITE_HAT' ? 'text-blue-400' : 'text-green-400'}`}>
+                {node.status.toUpperCase()}
+              </div>
+              {targetingMode.isActive && !isValidTarget && (
                 <div className="text-xs text-red-400 mt-1">Invalid Target</div>
               )}
             </div>
 
-            {/* Action Tooltip (Show when targeting a valid node)*/}
-            {targetingMode.isActive && isValidTarget && targetingMode.actionType && ( 
+            {/* Action Tooltip */}
+            {(targetingMode.isActive && isValidTarget && targetingMode.actionType) || isActionTarget ? (
               <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-black/90 text-white text-xs px-2 py-1 rounded shadow-lg pointer-events-none">
-                {targetingMode.actionType}
+                {targetingMode.actionType || 'Executing Action...'}
               </div>
-            )}
+            ) : null}
           </div>
         );
       })}

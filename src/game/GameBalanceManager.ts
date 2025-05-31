@@ -1,10 +1,64 @@
-import { GameMode, NodeType, NodeStatus } from '../types/game';
+import { GameMode, GameState, NetworkNode, NodeType, NodeStatus, GameAction } from '../types/game.types';
 import { Threat } from '../types';
+
+// Define action configurations with costs, cooldowns, and base success rates
+const ACTION_CONFIGS: Record<string, {
+  cost: GameState['resources'];
+  cooldown: number;
+  baseSuccessRate: number;
+  // Add other properties as needed, e.g., effects, target types
+}> = {
+  // White Hat Actions
+  PATCH_ALL: {
+    cost: { energy: 15, bandwidth: 10, processing: 20 },
+    cooldown: 7000, // milliseconds
+    baseSuccessRate: 0.8,
+  },
+  QUARANTINE: {
+    cost: { energy: 20, bandwidth: 25, processing: 15 },
+    cooldown: 10000,
+    baseSuccessRate: 0.7,
+  },
+  MONITOR: {
+    cost: { energy: 5, bandwidth: 5, processing: 5 },
+    cooldown: 2000,
+    baseSuccessRate: 1.0, // Monitoring always succeeds in applying the status
+  },
+  BACKUP: {
+    cost: { energy: 10, bandwidth: 15, processing: 10 },
+    cooldown: 8000,
+    baseSuccessRate: 0.9,
+  },
+
+  // Black Hat Actions
+  SCAN_TARGETS: {
+    cost: { energy: 10, bandwidth: 15, processing: 10 },
+    cooldown: 5000,
+    baseSuccessRate: 0.9, // Scanning usually succeeds
+  },
+  EXPLOIT: {
+    cost: { energy: 25, bandwidth: 20, processing: 30 },
+    cooldown: 12000,
+    baseSuccessRate: 0.6,
+  },
+  BACKDOOR: {
+    cost: { energy: 30, bandwidth: 25, processing: 25 },
+    cooldown: 15000,
+    baseSuccessRate: 0.5,
+  },
+  DENIAL_OF_SERVICE: {
+    cost: { energy: 20, bandwidth: 30, processing: 20 },
+    cooldown: 10000,
+    baseSuccessRate: 0.75,
+  },
+};
 
 export class GameBalanceManager {
   private static instance: GameBalanceManager;
 
-  private constructor() {}
+  private constructor() {
+    // Private constructor to prevent direct instantiation
+  }
 
   public static getInstance(): GameBalanceManager {
     if (!GameBalanceManager.instance) {
@@ -13,213 +67,85 @@ export class GameBalanceManager {
     return GameBalanceManager.instance;
   }
 
-  // Base success rates for different actions
-  private readonly successRates = {
-    WHITE_HAT: {
-      PATCH_ALL: 0.85,
-      QUARANTINE: 0.75,
-      BACKUP: 0.90,
-      MONITOR: 0.95,
-      SECURE_NODE: 0.80
-    },
-    BLACK_HAT: {
-      SCAN_TARGETS: 0.90,
-      QUARANTINE: 0.70,
-      EXPLOIT: 0.65,
-      BACKDOOR: 0.75,
-      COMPROMISE_NODE: 0.70
+  public getResourceCosts(actionName: string, mode: GameMode): GameState['resources'] {
+    // In a more complex game, costs might vary by mode or other factors
+    const config = ACTION_CONFIGS[actionName];
+    if (!config) {
+      console.error(`Action config not found for: ${actionName}`);
+      return { energy: 0, bandwidth: 0, processing: 0 };
     }
-  };
+    return config.cost;
+  }
 
-  // Resource costs for actions
-  private readonly resourceCosts = {
-    WHITE_HAT: {
-      PATCH_ALL: { energy: 25, bandwidth: 20, processing: 30 },
-      QUARANTINE: { energy: 35, bandwidth: 25, processing: 40 },
-      BACKUP: { energy: 25, bandwidth: 40, processing: 30 },
-      MONITOR: { energy: 18, bandwidth: 28, processing: 22 }
-    },
-    BLACK_HAT: {
-      SCAN_TARGETS: { energy: 18, bandwidth: 22, processing: 18 },
-      QUARANTINE: { energy: 25, bandwidth: 30, processing: 25 },
-      EXPLOIT: { energy: 40, bandwidth: 30, processing: 45 },
-      BACKDOOR: { energy: 35, bandwidth: 40, processing: 35 },
-      DENIAL_OF_SERVICE: { energy: 30, bandwidth: 40, processing: 30 }
+  public getActionCooldown(actionName: string, mode: GameMode): number {
+    // Cooldowns might also vary
+    const config = ACTION_CONFIGS[actionName];
+    if (!config) {
+      console.error(`Action config not found for: ${actionName}`);
+      return 0;
     }
-  };
+    return config.cooldown;
+  }
 
-  // Cooldown times for actions (in milliseconds)
-  private readonly cooldowns = {
-    WHITE_HAT: {
-      PATCH_ALL: 30000,
-      QUARANTINE: 45000,
-      BACKUP: 60000,
-      MONITOR: 25000
-    },
-    BLACK_HAT: {
-      SCAN_TARGETS: 20000,
-      QUARANTINE: 30000,
-      EXPLOIT: 40000,
-      BACKDOOR: 35000,
-      DENIAL_OF_SERVICE: 50000
-    }
-  };
-
-  // Node vulnerability and defense values
-  private readonly nodeAttributes = {
-    server: { baseVulnerability: 0.7, baseDefense: 0.6 },
-    database: { baseVulnerability: 0.8, baseDefense: 0.7 },
-    firewall: { baseVulnerability: 0.5, baseDefense: 0.9 },
-    router: { baseVulnerability: 0.6, baseDefense: 0.8 },
-    endpoint: { baseVulnerability: 0.9, baseDefense: 0.5 }
-  };
-
-  // Calculate success probability for an action
   public calculateSuccessProbability(
-    action: string,
+    actionName: string,
     mode: GameMode,
-    nodeType: string,
-    nodeStatus: NodeStatus,
-    nodeDefense: number
-  ): number {
-    // Base probability
-    let probability = 0.7;
-    
-    // Temporarily increase scan success rate for tutorial/initial phase
-    if (action === 'SCAN' || action === 'SCAN_TARGETS') {
-        probability = 0.95; // High probability for scan to ensure tutorial progression
-    } else {
-    // Adjust based on node type
-    switch (nodeType) {
-      case 'firewall': probability *= 0.8; break;
-      case 'database': probability *= 0.9; break;
-      case 'server': probability *= 1.0; break;
-      case 'router': probability *= 0.7; break;
-      case 'endpoint': probability *= 0.6; break;
-    }
-    
-    // Adjust based on current status
-    switch (nodeStatus) {
-      case 'secure': probability *= 0.5; break;
-      case 'patching': probability *= 0.7; break;
-      case 'monitoring': probability *= 0.8; break;
-      case 'vulnerable': probability *= 1.2; break;
-      case 'compromised': probability *= 1.5; break;
-    }
-
-    // Adjust based on defense level
-    probability *= (1 - (nodeDefense / 100));
-    }
-    
-    return Math.min(0.95, Math.max(0.05, probability));
-  }
-
-  // Get resource costs for an action
-  public getResourceCosts(action: string, mode: GameMode) {
-    return this.resourceCosts[mode][action as keyof typeof this.resourceCosts[typeof mode]] || {
-      energy: 0,
-      bandwidth: 0,
-      processing: 0
-    };
-  }
-
-  // Get cooldown time for an action
-  public getCooldownTime(action: string, mode: GameMode): number {
-    return this.cooldowns[mode][action as keyof typeof this.cooldowns[typeof mode]] || 30000;
-  }
-
-  // Calculate node vulnerability based on type and status
-  public calculateNodeVulnerability(nodeType: NodeType, status: NodeStatus): number {
-    const baseVulnerability = this.nodeAttributes[nodeType].baseVulnerability;
-    
-    switch (status) {
-      case 'secure':
-        return baseVulnerability * 0.3;
-      case 'compromised':
-        return baseVulnerability * 1.5;
-      case 'breached':
-        return baseVulnerability * 2.0;
-      case 'patching':
-        return baseVulnerability * 0.5;
-      case 'monitoring':
-        return baseVulnerability * 0.7;
-      default:
-        return baseVulnerability;
-    }
-  }
-
-  // Calculate node defense based on type and status
-  public calculateNodeDefense(nodeType: NodeType, status: NodeStatus): number {
-    const baseDefense = this.nodeAttributes[nodeType].baseDefense;
-    
-    switch (status) {
-      case 'secure':
-        return baseDefense * 1.5;
-      case 'compromised':
-        return baseDefense * 0.5;
-      case 'breached':
-        return baseDefense * 0.2;
-      case 'patching':
-        return baseDefense * 1.2;
-      case 'monitoring':
-        return baseDefense * 1.1;
-      default:
-        return baseDefense;
-    }
-  }
-
-  // Calculate success probability for a threat degrading a node's status
-  public calculateThreatSuccessProbability(
-    threatSeverity: Threat['severity'],
+    targetNodeType: NodeType,
     targetNodeStatus: NodeStatus,
-    targetNodeDefense: number // This should be the effective defense of the node
+    targetNodeDefense: number // 0-100
   ): number {
-    let baseChance = 0;
-
-    // Base chance based on threat severity
-    switch (threatSeverity) {
-      case 'LOW':
-        baseChance = 0.15;
-        break;
-      case 'MEDIUM':
-        baseChance = 0.35;
-        break;
-      case 'HIGH':
-        baseChance = 0.6;
-        break;
-      default:
-        baseChance = 0.1;
+    const config = ACTION_CONFIGS[actionName];
+    if (!config) {
+      console.error(`Action config not found for: ${actionName}`);
+      return 0;
     }
 
-    // Modify chance based on node status
-    switch (targetNodeStatus) {
-      case 'secure':
-        baseChance *= 0.3; // Much harder to compromise a secure node (was 0.5)
-        break;
-      case 'vulnerable':
-        baseChance *= 1.8; // Easier to compromise a vulnerable node (was 1.5)
-        break;
-      case 'compromised':
-        baseChance *= 1.4; // Easier to breach an already compromised node (was 1.2)
-        break;
-      case 'patching':
-        baseChance *= 0.4; // Harder to compromise while patching (was 0.6)
-        break;
-      case 'monitoring':
-        baseChance *= 0.6; // Slightly harder to compromise while monitored (was 0.8)
-      default:
-        // No change for 'active', 'scanning', 'breached'
-        break;
+    let probability = config.baseSuccessRate;
+
+    // Adjust probability based on factors
+    if (mode === 'WHITE_HAT') {
+      // White Hat actions against vulnerable/compromised nodes might have higher success
+      if (targetNodeStatus === 'vulnerable') probability += 0.2;
+      if (targetNodeStatus === 'compromised') probability += 0.1;
+
+      // Node defense reduces White Hat success
+      probability -= targetNodeDefense / 200; // Reduce by up to 0.5 for 100 defense
+
+    } else { // BLACK_HAT
+      // Black Hat actions against secure nodes might have lower success
+      if (targetNodeStatus === 'secure') probability -= 0.3;
+
+      // Node defense reduces Black Hat success more significantly
+      probability -= targetNodeDefense / 150; // Reduce by up to ~0.67 for 100 defense
+
+      // Exploits might be more successful against vulnerable nodes
+      if (actionName === 'EXPLOIT' && targetNodeStatus === 'vulnerable') probability += 0.3;
     }
 
-    // Modify chance based on node defense
-    // Assuming targetNodeDefense is on a scale of 0-100
-    // A simple inverse relationship: higher defense reduces chance
-    // Make the impact of defense slightly stronger
-    const defenseModifier = 1 - (targetNodeDefense / 150); // Was 100, now defense has a larger potential impact
-    let adjustedChance = baseChance * defenseModifier;
-
-    // Ensure chance stays within reasonable bounds
-    return Math.max(0.01, Math.min(0.95, adjustedChance)); // Adjust min/max slightly
+    // Ensure probability is between 0 and 1
+    return Math.max(0, Math.min(1, probability));
   }
+
+  public isValidTarget(node: NetworkNode, mode: GameMode, actionName: string): boolean {
+      // Basic target validation based on action and node status/type
+      if (mode === 'WHITE_HAT') {
+          switch (actionName) {
+              case 'PATCH_ALL': return node.status === 'vulnerable' || node.status === 'compromised';
+              case 'QUARANTINE': return node.status === 'compromised' || node.status === 'breached';
+              case 'MONITOR': return node.status !== 'monitoring'; // Can monitor any node not already monitored
+              case 'BACKUP': return node.status === 'active' || node.status === 'secure';
+              default: return false;
+          }
+      } else { // BLACK_HAT
+          switch (actionName) {
+              case 'SCAN_TARGETS': return node.status === 'active' || node.status === 'secure';
+              case 'EXPLOIT': return node.status === 'vulnerable';
+              case 'BACKDOOR': return node.status === 'compromised';
+              case 'DENIAL_OF_SERVICE': return node.status === 'active' || node.status === 'secure';
+              default: return false;
+          }
+      }
+  }
+
+  // Add more balance-related methods as needed (e.g., calculate resource regeneration, threat spawn rates, scoring)
 } 

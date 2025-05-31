@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Objective } from '../../types/game';
 import { ObjectiveManager } from '../../game/ObjectiveManager';
 import { GameMode } from '../../types/game';
+import { Eye, CheckCircle2, Clock } from 'lucide-react';
 
 interface ObjectiveDisplayProps {
   mode: GameMode;
@@ -34,9 +35,17 @@ export const ObjectiveDisplay: React.FC<ObjectiveDisplayProps> = ({ mode, classN
     return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
   };
 
+  const getRequirementProgress = (requirement: Objective['requirements'][0]) => {
+    const percentage = (requirement.current / requirement.target) * 100;
+    return Math.min(100, Math.max(0, percentage));
+  };
+
   return (
     <div className={`space-y-4 ${className}`}>
-      <h3 className="text-lg font-bold mb-2">OBJECTIVES</h3>
+      <div className="flex items-center gap-2 mb-2">
+        <Eye className="w-5 h-5" />
+        <h3 className="text-lg font-bold">OBJECTIVES</h3>
+      </div>
       <div className="space-y-3">
         {objectives.map((objective) => (
           <div
@@ -48,9 +57,16 @@ export const ObjectiveDisplay: React.FC<ObjectiveDisplayProps> = ({ mode, classN
             }`}
           >
             <div className="flex justify-between items-start mb-2">
-              <div>
-                <h4 className="font-bold text-sm">{objective.title}</h4>
-                <p className="text-xs opacity-70">{objective.description}</p>
+              <div className="flex items-start gap-2">
+                {objective.status === 'COMPLETED' ? (
+                  <CheckCircle2 className="w-5 h-5 text-green-400 flex-shrink-0 mt-1" />
+                ) : (
+                  <Clock className="w-5 h-5 text-blue-400 flex-shrink-0 mt-1" />
+                )}
+                <div>
+                  <h4 className="font-bold text-sm">{objective.title}</h4>
+                  <p className="text-xs opacity-70">{objective.description}</p>
+                </div>
               </div>
               <div className="text-right">
                 <div className="text-sm font-bold text-yellow-400">
@@ -68,35 +84,18 @@ export const ObjectiveDisplay: React.FC<ObjectiveDisplayProps> = ({ mode, classN
               {objective.requirements.map((req, index) => (
                 <div key={index} className="space-y-1">
                   <div className="flex justify-between text-xs">
-                    <span>{req.type.replace(/_/g, ' ')}</span>
-                    <span>
-                      {req.current}/{req.target}
-                    </span>
+                    <span className="opacity-70">{req.type}</span>
+                    <span>{req.current}/{req.target}</span>
                   </div>
-                  <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
+                  <div className="h-1.5 bg-gray-700 rounded-full overflow-hidden">
                     <div
-                      className={`h-full transition-all duration-300 ${getProgressColor(
-                        req.current,
-                        req.target
-                      )}`}
-                      style={{
-                        width: `${Math.min(
-                          (req.current / req.target) * 100,
-                          100
-                        )}%`,
-                      }}
+                      className={`h-full ${getProgressColor(req.current, req.target)} transition-all duration-300`}
+                      style={{ width: `${getRequirementProgress(req)}%` }}
                     />
                   </div>
                 </div>
               ))}
             </div>
-
-            {objective.status === 'COMPLETED' && (
-              <div className="mt-2 text-xs text-green-400 flex items-center gap-1">
-                <span>✓</span>
-                <span>Objective Complete!</span>
-              </div>
-            )}
           </div>
         ))}
       </div>

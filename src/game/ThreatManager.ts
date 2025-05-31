@@ -7,6 +7,7 @@ export class ThreatManager {
   private subscribers: Set<(threats: Threat[]) => void>;
   private cleanupInterval: NodeJS.Timeout | null;
   private actionCosts: Record<string, { energy: number; bandwidth: number; processing: number }>;
+  private threatCounter: number = 0; // Simple counter for unique threat IDs
 
   private constructor() {
     this.activeThreats = new Map();
@@ -50,54 +51,61 @@ export class ThreatManager {
     this.subscribers.forEach(callback => callback(threats));
   }
 
-  public isValidTarget(node: NetworkNode, mode: GameMode, actionType: string): boolean {
-    // Base validation - node must be interactable
+  public canInteractWithNode(node: NetworkNode, mode: GameMode, action: string): boolean {
+    // Always allow interaction if no specific action is being performed
+    if (!action) return true;
+
+    // Check if node is interactable
     if (!node.isInteractable) return false;
 
-    // Mode-specific validation
-    if (mode === 'WHITE_HAT') {
-      switch (actionType) {
-        case 'PATCH':
-          // Can patch vulnerable or compromised nodes
-          return node.status === 'vulnerable' || node.status === 'compromised';
-        case 'QUARANTINE':
-          // Can quarantine compromised or breached nodes
-          return node.status === 'compromised' || node.status === 'breached';
-        case 'MONITOR':
-          // Can monitor any active node
-          return node.status === 'active' || node.status === 'secure';
-        case 'SCAN':
-          // Can scan any node except those already being monitored
-          return node.status !== 'monitoring';
-        default:
-          return false;
-      }
-    } else { // BLACK_HAT
-      switch (actionType) {
-        case 'SCAN_TARGETS':
-          // Can scan any node except those already compromised
-          return node.status !== 'compromised' && node.status !== 'breached';
-        case 'EXPLOIT':
-          // Can exploit vulnerable or active nodes
-          return node.status === 'vulnerable' || node.status === 'active';
-        case 'BACKDOOR':
-          // Can backdoor compromised nodes
-          return node.status === 'compromised';
-        default:
-          return false;
-      }
+    // Check if node is in a valid state for the action
+    switch (action) {
+      case 'SCAN_TARGETS':
+        return node.status === 'active' || node.status === 'vulnerable';
+      case 'EXPLOIT':
+        return node.status === 'vulnerable' || node.status === 'active';
+      case 'BACKDOOR':
+        return node.status === 'compromised';
+      case 'DENIAL_OF_SERVICE':
+        return node.status === 'active' || node.status === 'vulnerable';
+      case 'PATCH_ALL':
+        return node.status === 'vulnerable' || node.status === 'compromised';
+      case 'QUARANTINE':
+        return node.status === 'compromised' || node.status === 'breached';
+      case 'BACKUP':
+        return node.status === 'active' || node.status === 'secure';
+      case 'MONITOR':
+        return node.status === 'active' || node.status === 'secure';
+      default:
+        return true;
     }
   }
 
-  public canInteractWithNode(node: NetworkNode, mode: GameMode, actionType: string): boolean {
-    // Base validation
+  public isValidTarget(node: NetworkNode, mode: GameMode, action: string): boolean {
+    // Check if node is interactable
     if (!node.isInteractable) return false;
 
-    // If no specific action is being performed, allow interaction
-    if (!actionType) return true;
-
-    // Check if the node is a valid target for the current action
-    return this.isValidTarget(node, mode, actionType);
+    // Check if node is in a valid state for the action
+    switch (action) {
+      case 'SCAN_TARGETS':
+        return node.status === 'active' || node.status === 'vulnerable';
+      case 'EXPLOIT':
+        return node.status === 'vulnerable' || node.status === 'active';
+      case 'BACKDOOR':
+        return node.status === 'compromised';
+      case 'DENIAL_OF_SERVICE':
+        return node.status === 'active' || node.status === 'vulnerable';
+      case 'PATCH_ALL':
+        return node.status === 'vulnerable' || node.status === 'compromised';
+      case 'QUARANTINE':
+        return node.status === 'compromised' || node.status === 'breached';
+      case 'BACKUP':
+        return node.status === 'active' || node.status === 'secure';
+      case 'MONITOR':
+        return node.status === 'active' || node.status === 'secure';
+      default:
+        return true;
+    }
   }
 
   public calculateSuccessProbability(
@@ -142,33 +150,43 @@ export class ThreatManager {
     node: NetworkNode,
     previousStatus: NodeStatus,
     currentStatus: NodeStatus,
-    mode: GameMode,
-    action?: string
+    mode: GameMode
   ): Threat | null {
-    // Only generate threats for significant status changes
+    // Only generate threats for status changes
     if (previousStatus === currentStatus) return null;
 
-    const threat: Threat = {
-      id: this.generateUniqueId(),
-      type: this.determineThreatType(node, previousStatus, currentStatus, mode, action),
-      severity: this.calculateThreatSeverity(node, currentStatus, mode),
-      source: `${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}`,
-      timestamp: new Date().toLocaleTimeString(),
-      status: this.determineThreatStatus(currentStatus, mode),
-      targetNodeId: node.id,
-      progress: 0,
-      timeToComplete: this.calculateThreatDuration(currentStatus, mode)
-    };
-
-    this.activeThreats.set(threat.id, threat);
-    
-    // Update node-threat mapping
-    const nodeThreats = this.nodeThreatMap.get(node.id) || [];
-    nodeThreats.push(threat.id);
-    this.nodeThreatMap.set(node.id, nodeThreats);
-
-    this.notifySubscribers();
-    return threat;
+    // Generate threat based on status change
+    switch (currentStatus) {
+      case 'compromised':
+        return {
+          id: Date.now(),
+          type: 'SYSTEM_BREACH',
+          severity: 'HIGH',
+          source: node.name,
+          status: 'ACTIVE',
+          timestamp: new Date().toLocaleTimeString()
+        };
+      case 'breached':
+        return {
+          id: Date.now(),
+          type: 'CRITICAL_BREACH',
+          severity: 'HIGH',
+          source: node.name,
+          status: 'ACTIVE',
+          timestamp: new Date().toLocaleTimeString()
+        };
+      case 'vulnerable':
+        return {
+          id: Date.now(),
+          type: 'VULNERABILITY_DETECTED',
+          severity: 'MEDIUM',
+          source: node.name,
+          status: 'ACTIVE',
+          timestamp: new Date().toLocaleTimeString()
+        };
+      default:
+        return null;
+    }
   }
 
   private calculateThreatDuration(status: NodeStatus, mode: GameMode): number {
@@ -307,6 +325,14 @@ export class ThreatManager {
         this.activeThreats.delete(id);
         hasChanges = true;
       }
+
+      // Update threat progress for executing threats
+      if (threat.status === 'EXECUTING') {
+        const elapsedTime = now - Date.parse(threat.timestamp);
+        const progress = Math.min(100, (elapsedTime / 15000) * 100); // 15 seconds for full progress
+        threat.progress = progress;
+        hasChanges = true;
+      }
     });
 
     if (hasChanges) {
@@ -318,6 +344,7 @@ export class ThreatManager {
     this.activeThreats.clear();
     this.nodeThreatMap.clear();
     this.notifySubscribers();
+    this.threatCounter = 0;
   }
 
   // New method to handle threat progression and node status changes
@@ -369,5 +396,75 @@ export class ThreatManager {
 
     // Threat fails but continues executing
     return { newThreatStatus: 'EXECUTING' };
+  }
+
+  public generateThreat(gameMode: GameMode, networkNodes: NetworkNode[]): Threat | null {
+    // Simple threat generation logic (can be made more complex)
+    if (Math.random() < 0.1) { // 10% chance to generate a threat each call (e.g., per game tick)
+      this.threatCounter++;
+      const id = `threat-${this.threatCounter}`;
+      const type = Math.random() < 0.6 ? 'Malware' : Math.random() < 0.8 ? 'Phishing Attempt' : 'Vulnerability Scan';
+      const severity = Math.random() < 0.5 ? 'LOW' : Math.random() < 0.85 ? 'MEDIUM' : 'HIGH';
+      const timestamp = new Date().toLocaleTimeString();
+      const source = gameMode === 'BLACK_HAT' ? 'Internal Network' : 'External'; // Simplified source
+
+      // Select a random active or vulnerable node as a potential target
+      const potentialTargets = networkNodes.filter(node => node.status === 'active' || node.status === 'vulnerable');
+      const targetNodeId = potentialTargets.length > 0 ? potentialTargets[Math.floor(Math.random() * potentialTargets.length)].id : undefined;
+
+      const newThreat: Threat = {
+        id,
+        type,
+        severity,
+        timestamp,
+        source,
+        targetNodeId,
+        status: 'ACTIVE',
+      };
+
+      this.activeThreats.set(Date.now(), newThreat);
+      console.log('Threat generated:', newThreat);
+      return newThreat;
+    }
+
+    return null; // No threat generated
+  }
+
+  public getThreats(): Threat[] {
+    return Array.from(this.activeThreats.values());
+  }
+
+  public mitigateThreat(threatId: string): boolean {
+    const threat = this.activeThreats.get(Date.parse(threatId));
+    if (threat) {
+      threat.status = 'MITIGATED';
+      console.log(`Threat ${threatId} mitigated.`);
+      // Optional: Remove mitigated threats after a delay or under certain conditions
+      return true;
+    }
+    return false;
+  }
+
+  public resolveThreat(threatId: string): boolean {
+    const threat = this.activeThreats.get(Date.parse(threatId));
+    if (threat) {
+      threat.status = 'RESOLVED';
+      // Optional: Remove resolved threats
+      this.activeThreats.delete(Date.parse(threatId));
+      console.log(`Threat ${threatId} resolved.`);
+      return true;
+    }
+    return false;
+  }
+
+  public destroy() {
+    // Clean up resources when the game is destroyed
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+      this.cleanupInterval = null;
+    }
+    this.activeThreats.clear();
+    this.nodeThreatMap.clear();
+    this.subscribers.clear();
   }
 } 

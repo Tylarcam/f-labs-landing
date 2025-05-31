@@ -69,7 +69,7 @@ export class ScoringManager {
   }
 
   // Add points to current score
-  private addScore(points: number): void {
+  public addScore(points: number): void {
     this.currentScore += points;
     if (this.currentScore > this.highScore) {
       this.highScore = this.currentScore;
@@ -118,5 +118,20 @@ export class ScoringManager {
   ): number {
     const basePenalty = Math.floor(this.baseScores[mode][action as keyof typeof this.baseScores[typeof mode]] * 0.2);
     return basePenalty * failedNodes;
+  }
+
+  // Update score with a modifier
+  public updateScore(modifier: number): void {
+    const points = Math.round(100 * modifier); // Base 100 points multiplied by the modifier
+    this.addScore(points);
+  }
+
+  public subtractScore(amount: number) {
+    this.currentScore = Math.max(0, this.currentScore - amount);
+    console.log(`Score updated: ${this.currentScore}`);
+  }
+
+  public getScore(): number {
+    return this.currentScore;
   }
 } 

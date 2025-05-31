@@ -1,9 +1,93 @@
 import { GameMode, Objective, ObjectiveStatus } from '../types/game';
+import { ObjectiveType } from '../types/mission.types';
+import { GameState, NodeStatus } from '../types/game.types';
+import { NetworkNode } from '../types/network.types';
+
+// Define objective configurations
+const OBJECTIVE_CONFIGS: Record<string, Objective[]> = {
+  WHITE_HAT: [
+    {
+      id: 'secure_network',
+      title: 'Secure the Network',
+      description: 'Ensure all critical nodes are secured.',
+      type: 'SECURE_NODES',
+      target: 6, // Example: Secure all 6 initial nodes
+      current: 0,
+      completed: false,
+      status: 'IN_PROGRESS',
+      priority: 'primary',
+    },
+    {
+      id: 'maintain_defense',
+      title: 'Maintain Defense',
+      description: 'Keep System Integrity above 80% for 2 minutes.',
+      type: 'TIME_SURVIVAL', // Or a custom type for time-based integrity
+      target: 120, // 120 seconds
+      current: 0, // Time elapsed above threshold
+      completed: false,
+      status: 'IN_PROGRESS',
+      priority: 'primary',
+    },
+     {
+       id: 'patch_vulnerabilities',
+       title: 'Patch Vulnerabilities',
+       description: 'Successfully patch 3 vulnerable nodes.',
+       type: 'SECURE_NODES', // Using SECURE_NODES to track nodes changing to 'secure' status
+       target: 3,
+       current: 0, // Number of nodes patched from 'vulnerable'
+       completed: false,
+       status: 'IN_PROGRESS',
+       priority: 'secondary',
+       relevantStatuses: ['vulnerable', 'secure'], // Track nodes transitioning between these statuses
+     }
+    // Add more White Hat objectives
+  ],
+  BLACK_HAT: [
+    {
+      id: 'breach_network',
+      title: 'Breach the Network',
+      description: 'Compromise the critical path nodes.',
+      type: 'COMPROMISE_NODES',
+      target: 3, // Example: Compromise FW-01, DB-01, RTR-01
+      current: 0,
+      completed: false,
+      status: 'IN_PROGRESS',
+      priority: 'primary',
+       relevantNodeIds: [2, 3, 5], // FW-01, DB-01, RTR-01
+    },
+    {
+      id: 'maintain_access',
+      title: 'Maintain Access',
+      description: 'Keep at least one critical path node compromised for 1 minute.',
+      type: 'NODE_ACCESS_MAINTAINED_DURATION', // Custom type for duration of compromised critical nodes
+      target: 60, // 60 seconds
+      current: 0, // Time elapsed with critical node compromised
+      completed: false,
+      status: 'IN_PROGRESS',
+      priority: 'primary',
+       relevantNodeIds: [2, 3, 5], // FW-01, DB-01, RTR-01
+    },
+     {
+       id: 'escalate_privileges',
+       title: 'Escalate Privileges',
+       description: 'Successfully use the Backdoor action on a compromised node.',
+       type: 'PERFORM_ACTION', // Custom type for performing a specific action
+       target: 1,
+       current: 0, // Number of times the action was performed
+       completed: false,
+       status: 'IN_PROGRESS',
+       priority: 'secondary',
+       relevantAction: 'BACKDOOR',
+     }
+    // Add more Black Hat objectives
+  ],
+};
 
 export class ObjectiveManager {
   private static instance: ObjectiveManager;
   private objectives: Map<string, Objective> = new Map();
   private currentObjectives: Objective[] = [];
+  private gameMode: GameMode = 'WHITE_HAT'; // Track the current game mode
 
   private constructor() {}
 
@@ -15,6 +99,7 @@ export class ObjectiveManager {
   }
 
   public initializeObjectives(mode: GameMode): void {
+    this.gameMode = mode;
     this.objectives.clear();
     this.currentObjectives = [];
 
@@ -299,5 +384,12 @@ export class ObjectiveManager {
   public resetObjectives(): void {
     this.objectives.clear();
     this.currentObjectives = [];
+  }
+
+  // Method to check if all primary objectives are completed
+  public areAllPrimaryObjectivesCompleted(): boolean {
+    return this.currentObjectives
+      .filter(objective => objective.priority === 'primary')
+      .every(objective => objective.status === 'COMPLETED');
   }
 } 
